@@ -25,20 +25,21 @@ outputDim = 1
 
 Layer0 = InputLayer(2, 8)
 Layer1 = RNNLayer(8, 8)
-Layer2 = RNNLayer(8, 8)
+Layer2 = RNNLayer(8, 1)
 
 #Layer Weight Initialization
-synapse_0 = 2*np.random.random((inputDim,hiddenDim)) - 1
-synapse_1 = 2*np.random.random((hiddenDim,hidden2Dim)) - 1
-synapse_h = 2*np.random.random((hiddenDim,hiddenDim)) - 1
-synapse2_1 = 2*np.random.random((hidden2Dim,outputDim)) - 1
-synapse2_h = 2*np.random.random((hidden2Dim,hidden2Dim)) - 1
+# synapse_0 = 2*np.random.random((inputDim,hiddenDim)) - 1
+# synapse_1 = 2*np.random.random((hiddenDim,hidden2Dim)) - 1
+# synapse_h = 2*np.random.random((hiddenDim,hiddenDim)) - 1
+# synapse2_1 = 2*np.random.random((hidden2Dim,outputDim)) - 1
+# synapse2_h = 2*np.random.random((hidden2Dim,hidden2Dim)) - 1
 
-synapse_0_update = np.zeros_like(synapse_0)
-synapse_1_update = np.zeros_like(synapse_1)
-synapse_h_update = np.zeros_like(synapse_h)
-synapse2_1_update = np.zeros_like(synapse2_1)
-synapse2_h_update = np.zeros_like(synapse2_h)
+# synapse_0_update = np.zeros_like(synapse_0)
+# synapse_1_update = np.zeros_like(synapse_1)
+# synapse_h_update = np.zeros_like(synapse_h)
+# synapse2_1_update = np.zeros_like(synapse2_1)
+# synapse2_h_update = np.zeros_like(synapse2_h)
+
 
 #Start Training
 for i in range(20000):
@@ -55,69 +56,100 @@ for i in range(20000):
 
 	totalError = 0
 
-	layer_1_values = list()
-	layer_1_values.append(np.zeros(hiddenDim))
-	layer_2_values = list()
-	layer_2_values.append(np.zeros(hiddenDim))
-	layer_3_deltas = list()
+	Layer0.values = list()
+	Layer0.values.append(np.zeros(Layer0.output_dim))
+	Layer1.values = list()
+	Layer1.values.append(np.zeros(Layer1.output_dim))
+	Layer2.values = list()
+
+	# layer_1_values = list()
+	# layer_1_values.append(np.zeros(hiddenDim))
+	# layer_2_values = list()
+	# layer_2_values.append(np.zeros(hiddenDim))
+	# layer_3_deltas = list()
 
 	for position in range(maxBits):
-
+		print position
+		
 		X = np.array([[inputBin1[maxBits - position - 1],inputBin2[maxBits - position - 1]]])
 		y = np.array([[outputBin[maxBits - position - 1]]]).T
 
-		layer_1 = sigmoid(np.dot(X,synapse_0) + np.dot(layer_1_values[-1],synapse_h))
-		layer_2 = sigmoid(np.dot(layer_1,synapse_1) + np.dot(layer_2_values[-1],synapse2_h))
-		layer_3 = sigmoid(np.dot(layer_2,synapse2_1))
+		layer_0 = forwardPropRecurrent(X, Layer0.synapse, Layer1.values[-1], Layer1.synapse_h)
+		layer_1 = forwardPropRecurrent(layer_0, Layer1.synapse, Layer2.values[-1], Layer2.synapse_h)
+		layer_2 = forwardPropOutput(layer_1, Layer1.synapse)
 
-		layer_3_error = y - layer_3
-		layer_3_deltas.append((layer_3_error)*sigmoid_deriv(layer_3))
-		totalError += np.abs(layer_3_error[0])
-		netOutput[maxBits - position - 1] = np.round(layer_3[0][0])
+		# layer_1 = sigmoid(np.dot(X,synapse_0) + np.dot(layer_1_values[-1],synapse_h))
+		# layer_2 = sigmoid(np.dot(layer_1,synapse_1) + np.dot(layer_2_values[-1],synapse2_h))
+		# layer_3 = sigmoid(np.dot(layer_2,synapse2_1))
 
-		layer_1_values.append(copy.deepcopy(layer_1))
-		layer_2_values.append(copy.deepcopy(layer_2))
+		layer_2_error = y - layer_2
+		layer_2_deltas.append((layer_2_error)*sigmoid_deriv(layer_2))
+		totalError += np.abs(layer_2_error[0])
+		netOutput[maxBits - position - 1] = np.round(layer_2[0][0])
 
-	future_layer_1_delta = np.zeros(hiddenDim)
-	future_layer_2_delta = np.zeros(hidden2Dim)
+		Layer0.values.append(copy.deepcopy(layer_0))
+		Layer1.values.append(copy.deepcopy(layer_1))
+
+	future_layer_0_delta = np.zeros(Layer0.output_dim)
+	future_layer_1_delta = np.zeros(Layer1.output_dim)
 
 	for position in range(maxBits):
 		X = np.array([[inputBin1[position],inputBin2[position]]])
-		layer_1 = layer_1_values[-position-1]
-		prev_layer_1 = layer_1_values[-position-2]
 
-		layer_2 = layer_2_values[-position-1]
-		prev_layer_2 = layer_2_values[-position-2]
+		layer_0 = Layer0.values[-position-1]
+		prev_layer_0 = Layer0.values[-position-2]
+		layer_1 = Layer1.values[-position-1]
+		prev_layer_1 = Layer1.values[-position-2]
 
 		# error at output layer
-		layer_3_delta = layer_3_deltas[-position-1]
+		layer_2_delta = layer_2_deltas[-position-1]
 
-		layer_2_delta = (future_layer_2_delta.dot(synapse2_h.T) + layer_3_delta.dot(synapse2_1.T)) * sigmoid_deriv(layer_2)
-
-		# error at hidden layer
-		layer_1_delta = (future_layer_1_delta.dot(synapse_h.T) + layer_2_delta.dot(synapse_1.T)) * sigmoid_deriv(layer_1)
+		# error at hidden layer	2	
+		layer_1_delta = (future_layer_1_delta.dot(Layer2.synapse_h.T) + layer_3_delta.dot(Layer2.synapse.T)) * sigmoid_deriv(layer_1)
+		
+		# error at hidden layer 1
+		layer_0_delta = (future_layer_0_delta.dot(Layer1.synapse_h.T) + layer_2_delta.dot(Layer1.synapse.T)) * sigmoid_deriv(layer_0)
 
 
 		# let's update all our weights so we can try again
-		synapse2_1_update += np.atleast_2d(layer_2).T.dot(layer_3_delta)
-		synapse2_h_update += np.atleast_2d(prev_layer_2).T.dot(layer_2_delta)
-		synapse_1_update += np.atleast_2d(layer_1).T.dot(layer_2_delta)
-		synapse_h_update += np.atleast_2d(prev_layer_1).T.dot(layer_1_delta)
-		synapse_0_update += X.T.dot(layer_1_delta)
+		Layer2.synapse_update += np.atleast_2d(layer_1).T.dot(layer_2_delta)
+		Layer2.synapse_h_update += np.atleast_2d(prev_layer_1).T.dot(layer_1_delta)
+		Layer1.synapse_update += np.atleast_2d(layer_0).T.dot(layer_0_delta)
+		Layer1.synapse_h_update += np.atleast_2d(prev_layer_1).T.dot(layer_1_delta)
+		Layer0.synapse_update += X.T.dot(layer_0_delta)
 
-		future_layer_1_delta = layer_1_delta
 
-	synapse_0 += synapse_0_update * alpha
-	synapse_1 += synapse_1_update * alpha
-	synapse_h += synapse_h_update * alpha
-	synapse2_1 += synapse2_1_update * alpha
-	synapse2_h += synapse2_h_update * alpha      
+		# synapse2_1_update += np.atleast_2d(layer_2).T.dot(layer_3_delta)
+		# synapse2_h_update += np.atleast_2d(prev_layer_2).T.dot(layer_2_delta)
+		# synapse_1_update += np.atleast_2d(layer_1).T.dot(layer_2_delta)
+		# synapse_h_update += np.atleast_2d(prev_layer_1).T.dot(layer_1_delta)
+		# synapse_0_update += X.T.dot(layer_1_delta)
 
-	synapse_0_update *= 0
-	synapse_1_update *= 0
-	synapse_h_update *= 0
-	synapse2_1_update *= 0
-	synapse2_h_update *= 0
+		future_layer_0_delta = layer_0_delta
+
+	Layer0.synapse += Layer0.synapse_update * alpha
+	Layer1.synapse += Layer1.synapse_update * alpha
+	Layer1.synapse_h += Layer1.synapse_h_update * alpha
+	Layer2.synapse += Layer2.synapse_update * alpha
+	Layer2.synapse_h += Layer2.synapse_h_update * alpha
+
+	# synapse_0 += synapse_0_update * alpha
+	# synapse_1 += synapse_1_update * alpha
+	# synapse_h += synapse_h_update * alpha
+	# synapse2_1 += synapse2_1_update * alpha
+	# synapse2_h += synapse2_h_update * alpha      
+
+	Layer0.synapse_update *= 0
+	Layer1.synapse_update *= 0
+	Layer1.synapse_h_update *= 0
+	Layer2.synapse_update *= 0
+	Layer2.synapse_h_update *= 0
+
+	# synapse_0_update *= 0
+	# synapse_1_update *= 0
+	# synapse_h_update *= 0
+	# synapse2_1_update *= 0
+	# synapse2_h_update *= 0
 
 	if(i % 1000 == 0):
 		print "Error:" + str(totalError)
